@@ -8,7 +8,7 @@
 - [x] Set appropriate CPU and memory settings in the task definition
 - [x] Run the service in a public subnet
 - [x] Create a CloudWatch dashboard with `CPUUtilization` and `MemoryUtilization` widgets
-- [ ] (Optional) Simulate load and observe how the metrics change
+- [x] (Optional) Simulate load and observe how the metrics change
 
 ## What I did
 Deployed a containerized application on an ECS cluster using the
