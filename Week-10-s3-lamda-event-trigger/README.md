@@ -1,0 +1,173 @@
+# Week 10 — S3-Triggered Lambda Function (Rename and Copy)
+
+**Topic:** Building Event-Driven Workflows with AWS Lambda and Service Integrations
+**Original session date:** August 9, 2025
+
+## Goals
+- [x] Create an S3 bucket that automatically triggers a Lambda function whenever a new file is uploaded
+- [x] Have the function respond to the event with something simple (a log in CloudWatch Logs)
+- [x] Show the S3 bucket with the trigger connected to the Lambda function
+- [x] Show the Lambda function code and settings
+- [x] Show proof the function worked, with a CloudWatch log
+
+## Overview
+This project uses an **Amazon S3 bucket to automatically trigger an AWS
+Lambda function** whenever a new file is uploaded. The function:
+
+1. Logs the name of the uploaded file to **Amazon CloudWatch Logs**.
+2. Copies the file to a second bucket with a new name
+   (`renamed-HappyFace.jpg`).
+
+Everything runs in a single AWS region and stays within the AWS Free Tier.
+
+## AWS Resources
+
+| Resource | Name / Value |
+|---|---|
+| Source bucket | `csn-image-source-bucket` |
+| Destination bucket | `csn-image-destination-bucket` |
+| Lambda function | `Create-Thumbnail` |
+| Runtime | Python 3.12 |
+| Memory / Timeout | 128 MB / 3 seconds (defaults) |
+| Trigger | S3, event type: All object create events |
+| Environment variable | `DEST_BUCKET = csn-image-destination-bucket` |
+| IAM role | `Create-Thumbnail-role-0xj35o3k` |
+
+## What I did
+
+### 1. Create the S3 buckets
+Created two buckets in the same region, with "Block all public access"
+left on:
+- Source: `csn-image-source-bucket`
+- Destination: `csn-image-destination-bucket`
+
+### 2. Create the Lambda function
+In Lambda, chose Create function > Author from scratch, with the
+Python 3.12 runtime and the default "Create a new role with basic Lambda
+permissions" option, which allows writing to CloudWatch Logs.
+
+### 3. Add S3 permissions to the execution role
+Added an inline policy to the function's role, following least
+privilege: read from the source bucket only, and write to the
+destination bucket only.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::csn-image-source-bucket/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::csn-image-destination-bucket/*"
+    }
+  ]
+}
+```
+
+### 4. Add the function code
+
+```python
+import boto3
+import os
+import urllib.parse
+
+s3 = boto3.client("s3")
+DEST_BUCKET = os.environ["DEST_BUCKET"]
+
+def lambda_handler(event, context):
+    for record in event["Records"]:
+        source_bucket = record["s3"]["bucket"]["name"]
+        # File names with spaces arrive URL-encoded, so decode them
+        key = urllib.parse.unquote_plus(record["s3"]["object"]["key"])
+
+        print(f"New file uploaded: {key} in bucket {source_bucket}")
+
+        new_key = "renamed-" + key
+
+        s3.copy_object(
+            Bucket=DEST_BUCKET,
+            Key=new_key,
+            CopySource={"Bucket": source_bucket, "Key": key},
+        )
+
+        print(f"Copied to {DEST_BUCKET} as {new_key}")
+
+    return {"statusCode": 200}
+```
+
+How the code works:
+- The function loops over every record in the event, reads the bucket
+  name and object key, and decodes the key because S3 URL-encodes file
+  names (for example, spaces arrive as `+`).
+- It prints the uploaded file's name, which appears in CloudWatch Logs.
+- It copies the file to the destination bucket with `renamed-` added to
+  the front of the name, then logs where the copy went.
+- The destination bucket name comes from an environment variable, so
+  it isn't hard-coded in the function.
+
+### 5. Set the environment variable
+Under Configuration > Environment variables, set `DEST_BUCKET` to the
+destination bucket name.
+
+### 6. Add the S3 trigger
+Added a trigger: S3 > source bucket > event type "All object create
+events". The source and destination buckets are **different**, to avoid
+the function triggering itself in an endless loop.
+
+## Testing
+
+1. Uploaded `HappyFace.jpg` to `csn-image-source-bucket`.
+2. Lambda was triggered automatically.
+3. CloudWatch Logs showed:
+   - `New file uploaded: HappyFace.jpg in bucket csn-image-source-bucket`
+   - `Copied to csn-destination-bucket as renamed-HappyFace.jpg`
+4. `renamed-HappyFace.jpg` appeared in the destination bucket.
+
+## Issues encountered
+
+| Error | Cause | Fix |
+|---|---|---|
+| `AccessDenied ... s3:GetObject` | The IAM policy was on a different role than the one the function used, and its resource ARN was missing `/*` | Added the policy to the correct role and used `arn:aws:s3:::csn-image-source-bucket/*` |
+| `KeyError: 'DEST_BUCKET'` | The environment variable was not set on the function | Added `DEST_BUCKET` under Configuration > Environment variables |
+
+## Key takeaways
+- `s3:GetObject` and `s3:PutObject` apply to objects, so the resource
+  ARN must end in `/*`.
+- If a function is recreated, AWS creates a new role with a new random
+  suffix, so policies have to be added to the new role.
+- The IAM Policy Simulator is a quick way to check whether a role is
+  allowed to perform an action.
+- A trigger should write to a different bucket from the one it watches,
+  otherwise each copy fires the function again in an endless loop.
+- Reading the destination from an environment variable keeps the code
+  reusable and avoids hard-coding resource names.
+- Anything the function prints appears in CloudWatch Logs, which makes
+  the logs the first place to check when debugging.
+
+## Cleanup
+After completing and documenting this task, I deleted the resources I
+created to stay within AWS Free Tier limits and avoid unexpected
+charges. Resources removed: both S3 buckets (emptied first), the Lambda
+function, and its IAM role.
+
+## Screenshots / Evidence
+**S3 bucket showing the Lambda trigger**
+<img width="1242" height="297" alt="Screenshot 2026-11-01 130907" src="https://github.com/user-attachments/assets/ad8d3dec-18fb-419c-ac6a-50678f622bb2" />
+
+**Lambda function code**
+<img width="1048" height="722" alt="Screenshot 2026-11-01 132552" src="https://github.com/user-attachments/assets/19e9e097-4f14-4d88-a7a0-6a684bfa04fe" />
+
+**Lambda settings (environment variable and role)**
+<img width="1228" height="270" alt="Screenshot 2026-11-01 132651" src="https://github.com/user-attachments/assets/a4f5525d-c1df-4264-adea-58573bb3b2f8" />
+<img width="1226" height="310" alt="Screenshot 2026-11-01 132737" src="https://github.com/user-attachments/assets/5facd8c4-da69-4cb2-9b33-1aac88cdc918" />
+
+**CloudWatch logs proving the function ran**
+<img width="1540" height="443" alt="Screenshot 2026-11-01 125120" src="https://github.com/user-attachments/assets/031b0fc6-10cd-489d-b049-c493862ac31a" />
+
+**Renamed file in the destination bucket**
+<img width="662" height="425" alt="Screenshot 2026-11-01 132902" src="https://github.com/user-attachments/assets/a59e3cf1-8901-42ca-a2da-49acd8cd48d0" />
