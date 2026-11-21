@@ -79,7 +79,7 @@ After documenting each task, I delete the resources I created so the account sta
 I'm Puseletso Phiri, an IT graduate from South Africa building skills in AWS Cloud.
 
 - GitHub: [PuseletsoPhiri](https://github.com/PuseletsoPhiri)
-- Email: khalabiphiri@protonmail.com
+- 💼 [LinkedIn](https://www.linkedin.com/in/puseletso-phiri-705b79b9)
 
 ## Acknowledgements
 Curriculum and weekly tasks by [CloudSec Network (CSN)](https://www.cloudsecnetwork.com). 
